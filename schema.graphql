@@ -1,5 +1,21 @@
-type ExampleEntity @entity {
+type SafeTransaction @entity {
   id: ID!
-  count: BigInt!
-  owner: Bytes! # address
+  safe: Bytes! # address
+  to: Bytes! # address
+  value: BigInt!
+  data: Bytes!
+  operation: Int!
+  nonce: BigInt!
+  fees: BigInt
+  feeToken: Bytes #address
+  feeReceiver: Bytes #address
+  success: Boolean!
+  reverted: Boolean!
+  transaction: Bytes!
+}
+
+type SafeInfo @entity {
+  id: ID!
+  nonce: BigInt!
+  # TODO add modules, owners and threshold
 }

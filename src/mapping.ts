@@ -1,43 +1,49 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigInt, log } from "@graphprotocol/graph-ts"
 import {
-  Contract,
-  AddedOwner,
-  ApproveHash,
-  ChangedMasterCopy,
-  ChangedThreshold,
-  DisabledModule,
-  EnabledModule,
-  ExecutionFailure,
-  ExecutionFromModuleFailure,
-  ExecutionFromModuleSuccess,
-  ExecutionSuccess,
-  RemovedOwner,
-  SignMsg
-} from "../generated/Contract/Contract"
-import { ExampleEntity } from "../generated/schema"
+  GnosisSafe, ExecTransactionCall
+} from "../generated/GnosisSafe/GnosisSafe"
+import { SafeTransaction, SafeInfo } from "../generated/schema"
 
-export function handleAddedOwner(event: AddedOwner): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
-
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (entity == null) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
-
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+export function handleExecTransaction(call: ExecTransactionCall): void {
+  let safeId = call.from.toHex()
+  let safeInfo = SafeInfo.load(safeId)
+  if (safeInfo == null) {
+    safeInfo = new SafeInfo(safeId)
+    safeInfo.nonce = BigInt.fromI32(0)
+    safeInfo.save()
   }
-
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
-
-  // Entity fields can be set based on event parameters
-  entity.owner = event.params.owner
-
-  // Entities can be written to the store with `.save()`
-  entity.save()
+  log.info("Process call from {} in {}", [call.from.toHex(), call.transaction.hash.toHex()])
+  let safe = GnosisSafe.bind(call.from)
+  let contractNonce = safe.nonce()
+  let reverted = contractNonce == safeInfo.nonce
+  if (!reverted) {
+    safeInfo.nonce = contractNonce
+    safeInfo.save()
+  }
+  let nonce = reverted ? contractNonce : (contractNonce - BigInt.fromI32(1))
+  let safeTxHash = safe.getTransactionHash(
+    call.inputs.to, 
+    call.inputs.value, 
+    call.inputs.data, 
+    call.inputs.operation, 
+    call.inputs.safeTxGas, 
+    call.inputs.baseGas, 
+    call.inputs.gasPrice, 
+    call.inputs.gasToken,
+    call.inputs.refundReceiver,
+    nonce
+  )
+  let transaction = new SafeTransaction(safeTxHash.toHex())
+  transaction.safe = call.from
+  transaction.to = call.inputs.to
+  transaction.value = call.inputs.value
+  transaction.data = call.inputs.data
+  transaction.operation = call.inputs.operation
+  transaction.reverted = reverted
+  transaction.success = call.outputs.success
+  transaction.transaction = call.transaction.hash
+  transaction.nonce = nonce
+  transaction.save()
 
   // Note: If a handler doesn't require existing field values, it is faster
   // _not_ to load the entity from the store. Instead, create it fresh with
@@ -74,29 +80,3 @@ export function handleAddedOwner(event: AddedOwner): void {
   // - contract.requiredTxGas(...)
   // - contract.signedMessages(...)
 }
-
-export function handleApproveHash(event: ApproveHash): void {}
-
-export function handleChangedMasterCopy(event: ChangedMasterCopy): void {}
-
-export function handleChangedThreshold(event: ChangedThreshold): void {}
-
-export function handleDisabledModule(event: DisabledModule): void {}
-
-export function handleEnabledModule(event: EnabledModule): void {}
-
-export function handleExecutionFailure(event: ExecutionFailure): void {}
-
-export function handleExecutionFromModuleFailure(
-  event: ExecutionFromModuleFailure
-): void {}
-
-export function handleExecutionFromModuleSuccess(
-  event: ExecutionFromModuleSuccess
-): void {}
-
-export function handleExecutionSuccess(event: ExecutionSuccess): void {}
-
-export function handleRemovedOwner(event: RemovedOwner): void {}
-
-export function handleSignMsg(event: SignMsg): void {}
